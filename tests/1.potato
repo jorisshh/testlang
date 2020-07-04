@@ -1,0 +1,165 @@
+import "core.fmt"
+import "core.unsafe.pointer"
+import "core.unsafe.code"
+
+
+
+trait AddTrait<T> {
+    fn add(&T a, &T b) T
+}
+
+struct SomeStruct {
+    i32 someInt 
+    bool someBool
+}
+
+impl AddTrait<SomeStruct> in SomeStruct {
+    fn add(&SomeStruct a, &SomeStruct b) SomeStruct {
+        return SomeStruct {
+            .someInt = a.someInt + b.someInt,
+            .someBool = a.someBool + b.someBool,
+        }
+    }
+}
+
+
+// export using import "core.fmt"
+// using import "core.fmt"
+
+
+struct Vec3 {
+	f32 x
+	f32 y
+	f32 z
+}
+
+impl AddTrait<Vec3> in Vec3 {
+	fn add(&Vec3 a, &Vec3 b) Vec3 {
+        return Vec3 {
+			.x = a.x + b.x,
+			.y = a.y + b.y,
+			.z = a.z + b.z,
+        }
+    }
+}
+
+
+enum SomeEnum {
+    A = 1, // value has to be explicitally defined
+    B = 2,
+    C = 3,
+    D = 4,
+}
+
+var global = "abc"
+bool globalBool = false
+
+
+fn build(&ast.SyntaxTree tree, &build.BuildContext context) {
+
+    for var it in context.types {
+        if it.value.type == ast.Types.Int32 {
+
+        } else if it.value.type == ast.Types.Uint32 {
+
+        }
+
+        // var i = ast.isInteger(it.value.type)
+
+    }
+
+
+    // output and write file to disk
+    context.compiler.compile(tree, context);
+
+}
+
+extern fn cprintln(&string s)
+extern fn someCppMethod(i32 val)
+
+fn main() i32 {
+    var a = false
+    var b = (u32)3
+    u32 c = 32
+    const u32 d = 32
+
+    defer log("defer statement")
+    if a != false || b != 3 {
+        return 0
+    }
+
+    alias integer = i32
+    integer e = 3
+
+    for var it in enumerable {
+		// Auto. creates variable it for iterator data.
+		// it.index
+		// it.value is a pointer to the value
+
+		// Memory.Unsafe.incrementPointer(it.pointer, 4)
+		// Memory.Unsafe.incrementPointer(it.pointer, -4)
+		// Memory.Unsafe.newPointer(someAddress, &pointer)
+
+		it.value += 3 // Increments value, not the pointer
+
+		// it.value
+	}
+	
+	for var i = 0; i < 100; i++ {
+		
+	}
+
+
+    takesOperator(+, 3, 2)
+    takesOperator({ + }, 3, 2)
+	takesCodeBlock({ log("abc " + __LINE__) }) // code block expands in caller, so __LINE__ should point to wherever it's expanded at compile time
+
+	var v1, v2 = something(2)
+	
+	panic("end of application")
+    return 0
+}
+
+fn getAll(std.Operator op) {
+
+
+	for var it in someList {
+		if it op last { // it > last || it < last || it == last || it != last
+
+		}
+	}
+
+}
+
+fn someFunc(bool a) result<string> {
+
+	return result { .value = "abc", .error = Error { .text = "ERROR!" } }
+}
+
+fn assert(bool b, string msg = "") {
+    if b == false {
+        panic(msg)
+    }
+}
+
+fn takesOperator(std.Code op, i32 a, i32 b) bool {
+    return a *op b
+}
+
+
+comptime fn takesCodeBlock(std.Code code) {
+    *code // Expands code block in-place
+}
+
+export fn log(&string s) {
+    stdout.write(*s);
+    stdout.write("\n");
+}
+
+fn malloc(i32 size) intptr {
+    return 0
+}
+
+fn something(i32 a) i32, bool {
+    return a + 1, false
+}
