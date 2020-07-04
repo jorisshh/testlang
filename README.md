@@ -1,1 +1,1 @@
-# testlang
+# A compiler for fun
