@@ -7,6 +7,7 @@
 #include "types.h"
 #include "util.h"
 #include "lexer.h"
+#include "parser.h"
 
 int main(int argc, char** argv) {
 
@@ -30,6 +31,13 @@ int main(int argc, char** argv) {
 	for (lang::lexer::Token& t : tokens) {
 		std::cout << "\"" << t.span.string << "\":" << lang::lexer::TokenType::toString(t.type) << " " << t.span.from << ":" << t.span.to << "\n";
 	}
+
+
+	auto nodes = lang::parser::parse(tokens);
+	for (auto* node : nodes) {
+		std::cout << node->type << "\n";
+	}
+
 
 
 	f64 microSeconds = (f64)std::chrono::duration_cast<std::chrono::microseconds>((endLexingTime - startTime)).count();

@@ -7,8 +7,16 @@ fn main() i32 {
 	f32 c = 2.23f64
 
 	i32 result = a + b
+	i32 result2 = someFunc(99)
+	i32 result3 = someFunc(3)
+
 	// print("a: {} b: {} result: {}", a, b, result)
-	return result
+	print(someFunc(3))
+	print(someFunc(result))
+
+	println("{}", result)
+	println("{}", result2)
+	println("{}", result3)
 }
 
 fn someFunc(i32 a) i32 {

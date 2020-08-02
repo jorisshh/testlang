@@ -10,6 +10,7 @@ namespace lang::lexer {
 
 	struct TextSpan {
 		std::string string;
+        size_t line;
 		size_t from;
         size_t to;
 	};
@@ -107,7 +108,7 @@ namespace lang::lexer {
 
             TEMPORARY_KEYWORD_C_VARARGS = 400,
 
-            GE_OP,                // >=
+            GE_OP = 500,                // >=
             LE_OP,                // <=
             NE_OP,                // !=
             EQ_OP,                // ==
@@ -130,7 +131,7 @@ namespace lang::lexer {
             //DOTDOT,               // ..
             //DOTDOTLT,             // ..<
 
-            COMMENT,
+            COMMENT = 600,
         };
 
         static const char* toString(Type t) {
@@ -216,6 +217,7 @@ namespace lang::lexer {
             case TokenType::CARET_EQ: return "CARET_EQ";
             case TokenType::COMMENT: return "COMMENT";
             default:
+                return "Undefined";
                 break;
             }
         }

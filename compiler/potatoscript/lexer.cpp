@@ -5,7 +5,11 @@
 using namespace lang::lexer;
 
 static bool isWhitespace(char c) {
-    return c == ' ' || c == '\t' || c == '\v' || c == '\r' || c == '\n';
+    return c == ' ' || c == '\t'; //  || c == '\v' ( https://en.wikipedia.org/wiki/Tab_key )
+}
+
+static bool isLineBreak(char c) {
+    return c == '\n' || c == '\r';
 }
 
 int toLower(int c) {
@@ -93,11 +97,12 @@ static bool isKeyword(const std::string& s, size_t index, const std::string& con
     return true;
 }
 
-static Token createSingleToken(TokenType::Type t, const std::string& s, size_t index, size_t length) {
+static Token createSingleToken(TokenType::Type t, const std::string& s, size_t lineNumber, size_t index, size_t length) {
     Token res{
         .type = t,
         .span = TextSpan {
             .string = s.substr(index, length),
+            .line = lineNumber,
             .from = index,
             .to = index + length,
         },
@@ -145,15 +150,26 @@ static bool tryGetReservedBasicType(const std::string& s, TokenType::Type* outRe
 }
 
 const char eol = '\n';
-const char whiteSpace = ' ';
 using namespace lang::lexer;
 
 std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
 {
+    size_t lineNumber = 0;
+
     std::vector<Token> token;
     for (size_t i = 0; i < s.size(); i++) {
         char c = s[i];
         
+        if (isLineBreak(c)) {
+            lineNumber++;
+            continue;
+        }
+
+        // TODO: only ignore if we're not inside a string atm...
+        if (isWhitespace(c)) {
+            continue;
+        }
+
         if (isCommentStart(s, i)) {
             size_t commentLength = countUntilCharacter(s, i, eol);
             
@@ -162,6 +178,7 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
                 .type = TokenType::COMMENT,
                 .span = TextSpan {
                     .string = s2,
+                    .line = lineNumber,
                     .from = i,
                     .to = i + commentLength,
                 },
@@ -176,24 +193,25 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
 
         if (isKeyword(s, i, "fn")) {
             size_t identifierLength = 2;
-            token.push_back(createSingleToken(TokenType::KEYWORD_FUNC, s, i, identifierLength));
+            token.push_back(createSingleToken(TokenType::KEYWORD_FUNC, s, lineNumber, i, identifierLength));
             i += identifierLength;
             continue;
         }
 
         if (isKeyword(s, i, "return")) {
             size_t identifierLength = 6;
-            token.push_back(createSingleToken(TokenType::KEYWORD_RETURN, s, i, identifierLength));
+            token.push_back(createSingleToken(TokenType::KEYWORD_RETURN, s, lineNumber, i, identifierLength));
             i += identifierLength;
             continue;
         }
 
         if (isKeyword(s, i, "if")) {
             size_t identifierLength = 2;
-            token.push_back(createSingleToken(TokenType::KEYWORD_IF, s, i, identifierLength));
+            token.push_back(createSingleToken(TokenType::KEYWORD_IF, s, lineNumber, i, identifierLength));
             i += identifierLength;
             continue;
         }
+
 
 
 
@@ -221,6 +239,7 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
                     .type = type,
                     .span = TextSpan {
                         .string = str,
+                        .line = lineNumber,
                         .from = start,
                         .to = end,
                     },
@@ -236,6 +255,7 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
                 .type = TokenType::IDENTIFIER,
                 .span = TextSpan {
                     .string = str,
+                    .line = lineNumber,
                     .from = start,
                     .to = end,
                 },
@@ -250,61 +270,61 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
 
         if (isKeyword(s, i, "==")) {
             size_t identifierLength = 2;
-            token.push_back(createSingleToken(TokenType::EQ_OP, s, i, identifierLength));
+            token.push_back(createSingleToken(TokenType::EQ_OP, s, lineNumber, i, identifierLength));
             i += identifierLength;
             continue;
         }
 
         if (isKeyword(s, i, "!=")) {
             size_t identifierLength = 2;
-            token.push_back(createSingleToken(TokenType::NE_OP, s, i, identifierLength));
+            token.push_back(createSingleToken(TokenType::NE_OP, s, lineNumber, i, identifierLength));
             i += identifierLength;
             continue;
         }
 
 
         if (c == '(') {
-            token.push_back(createSingleToken(TokenType::LEFT_PAREN, s, i, 1));
+            token.push_back(createSingleToken(TokenType::LEFT_PAREN, s, lineNumber, i, 1));
             continue;
         }
         else if (c == ')') {
-            token.push_back(createSingleToken(TokenType::RIGHT_PAREN, s, i, 1));
+            token.push_back(createSingleToken(TokenType::RIGHT_PAREN, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '{') {
-            token.push_back(createSingleToken(TokenType::LEFT_CURLY, s, i, 1));
+            token.push_back(createSingleToken(TokenType::LEFT_CURLY, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '}') {
-            token.push_back(createSingleToken(TokenType::RIGHT_CURLY, s, i, 1));
+            token.push_back(createSingleToken(TokenType::RIGHT_CURLY, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '[') {
-            token.push_back(createSingleToken(TokenType::LEFT_BRACKET, s, i, 1));
+            token.push_back(createSingleToken(TokenType::LEFT_BRACKET, s, lineNumber, i, 1));
             continue;
         }
         else if (c == ']') {
-            token.push_back(createSingleToken(TokenType::RIGHT_BRACKET, s, i, 1));
+            token.push_back(createSingleToken(TokenType::RIGHT_BRACKET, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '+') {
-            token.push_back(createSingleToken(TokenType::PLUS, s, i, 1));
+            token.push_back(createSingleToken(TokenType::PLUS, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '-') {
-            token.push_back(createSingleToken(TokenType::MINUS, s, i, 1));
+            token.push_back(createSingleToken(TokenType::MINUS, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '=') {
-            token.push_back(createSingleToken(TokenType::EQUALS, s, i, 1));
+            token.push_back(createSingleToken(TokenType::EQUALS, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '<') {
-            token.push_back(createSingleToken(TokenType::LEFT_ANGLE, s, i, 1));
+            token.push_back(createSingleToken(TokenType::LEFT_ANGLE, s, lineNumber, i, 1));
             continue;
         }
         else if (c == '>') {
-            token.push_back(createSingleToken(TokenType::RIGHT_ANGLE, s, i, 1));
+            token.push_back(createSingleToken(TokenType::RIGHT_ANGLE, s, lineNumber, i, 1));
             continue;
         }
 
@@ -341,6 +361,7 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
                 .type = type,
                 .span = TextSpan {
                     .string = s2,
+                    .line = lineNumber,
                     .from = start,
                     .to = end,
                 },
@@ -353,13 +374,8 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             continue;
         }
 
-        // TODO: only ignore if we're not inside a string atm...
-        if (isWhitespace(c)) {
-            continue;
-        }
-
         std::cout << "couldn't identify: " << c << "\n";
     }
 
-    return token;
+    return std::move(token);
 }
