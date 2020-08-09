@@ -28,20 +28,27 @@ int main(int argc, char** argv) {
 
 	hc::time_point endLexingTime = hc::now();
 
+	std::cout << "----------------- LEXER ----------------- " << "\n";
 	for (lang::lexer::Token& t : tokens) {
 		std::cout << "\"" << t.span.string << "\":" << lang::lexer::TokenType::toString(t.type) << " " << t.span.from << ":" << t.span.to << "\n";
 	}
 
 
+	std::cout << "----------------- PARSER ----------------- " << "\n";
 	auto nodes = lang::parser::parse(tokens);
 	for (auto* node : nodes) {
-		std::cout << node->type << "\n";
+		//std::cout << node->type << "\n";
+		if (node == nullptr) { continue; }
+
+		lang::parser::AstPrinter printer{};
+		node->print(printer);
+		std::cout << printer.buffer << "\n";
 	}
 
 
 
 	f64 microSeconds = (f64)std::chrono::duration_cast<std::chrono::microseconds>((endLexingTime - startTime)).count();
-	std::cout << "Lexing time:: " << (microSeconds * 1000) << "ms\n";
+	std::cout << "Compile time:: " << (microSeconds * 1000) << "ms\n";
 
 	return 0;
 }

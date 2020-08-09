@@ -48,7 +48,8 @@ namespace lang::lexer {
             //TAG = '@',
 
             END = 256,
-            INTEGER,
+            INTEGER32,
+            INTEGER64,
             FLOAT32,
             FLOAT64,
             IDENTIFIER,
@@ -160,7 +161,8 @@ namespace lang::lexer {
             case TokenType::EXCLAMATION: return "EXCLAMATION";
             case TokenType::TILDE: return "TILDE";
             case TokenType::END: return "END";
-            case TokenType::INTEGER: return "INTEGER";
+            case TokenType::INTEGER32: return "INTEGER32";
+            case TokenType::INTEGER64: return "INTEGER64";
             case TokenType::FLOAT32: return "FLOAT32";
             case TokenType::FLOAT64: return "FLOAT64";
             case TokenType::IDENTIFIER: return "IDENTIFIER";

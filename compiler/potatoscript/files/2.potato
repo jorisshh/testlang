@@ -21,12 +21,12 @@ fn main() i32 {
 
 fn someFunc(i32 a) i32 {
 	if a > 10 {
-		return a - 5
+		return 2
 	}
 
-	return a + 1
+	return 3
 }
 
-fn someFunc(code a) i32 {
-	*a // Expand code block at compile time
-}
+// fn someFunc(code a) i32 {
+// 	*a // Expand code block at compile time
+// }

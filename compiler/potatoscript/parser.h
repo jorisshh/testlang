@@ -10,6 +10,31 @@ using namespace lang::lexer;
 
 namespace lang::parser {
 
+	class AstPrinter {
+	public:
+		size_t indentation = 0;
+		std::string buffer;
+
+		void print(const char* c) {
+			for (size_t i = 0; i < indentation; i++) {
+				buffer.append("\t");
+			}
+
+			buffer.append(c);
+			buffer.append(" ");
+		}
+
+		void println(const char* c) {
+			for (size_t i = 0; i < indentation; i++) {
+				buffer.append("\t");
+			}
+
+			buffer.append(c);
+			buffer.append("\n");
+		}
+	};
+
+
 	class ExprAST {
 	public:
 		std::string type;
@@ -22,6 +47,8 @@ namespace lang::parser {
 
 		virtual ~ExprAST() {}
 
+		virtual void print(AstPrinter& printer) = 0;
+
 		virtual std::string prettyName() {
 			return type;
 		}
@@ -29,21 +56,110 @@ namespace lang::parser {
 
 	/// Expression class for numeric literals like "1.0".
 	class NumberExprAST : public ExprAST {
-		double val;
+		double float64Value;
+		float float32Value;
+
+		int32_t int32Value;
+		int64_t int64Value;
+
+		TokenType::Type type;
 
 	public:
-		NumberExprAST(double val) : ExprAST("Number"), val(val) {}
+		NumberExprAST(float val) : ExprAST("Number"), float32Value(val), type(TokenType::FLOAT32) {}
+		NumberExprAST(double val) : ExprAST("Number"), float64Value(val), type(TokenType::FLOAT64) {}
+		NumberExprAST(int32_t val) : ExprAST("Number"), int32Value(val), type(TokenType::INTEGER32) {}
+		NumberExprAST(int64_t val) : ExprAST("Number"), int64Value(val), type(TokenType::INTEGER64) {}
+
+		virtual void print(AstPrinter& printer) override {
+			switch (type)
+			{
+			case TokenType::FLOAT32:
+				printer.print(std::to_string(float32Value).c_str());
+				break;
+			case TokenType::FLOAT64:
+				printer.print(std::to_string(float64Value).c_str());
+				break;
+			case TokenType::INTEGER32:
+				printer.print(std::to_string(int32Value).c_str());
+				break;
+			case TokenType::INTEGER64:
+				printer.print(std::to_string(int64Value).c_str());
+				break;
+			default:
+				break;
+			}
+		}
+	};
+
+	class ConstantStringExpr : public ExprAST {
+		std::string stringValue;
+
+	public:
+		ConstantStringExpr(std::string val) : ExprAST("Number"), stringValue(val) {}
+
+		virtual void print(AstPrinter& printer) override {
+			printer.buffer += "\"";
+			printer.buffer += stringValue.c_str();
+			printer.buffer += "\" ";
+		}
+	};
+
+	class ReturnAST : public ExprAST {
+		ExprAST* value;
+
+	public:
+		ReturnAST(ExprAST* val) : ExprAST("Return"), value(val) {}
+
+		virtual void print(AstPrinter& printer) override {
+			if (value) {
+				printer.print("return");
+				value->print(printer);
+			}
+		}
 	};
 
 	class VariableExprAST : public ExprAST {
 	public:
-		std::string name;
 		std::string type;
+		std::string name;
+		
+		ExprAST* assignment;
 
-		VariableExprAST(const std::string& name, const std::string& type) 
+		VariableExprAST(const std::string& type, const std::string& name, ExprAST* assignment)
 			: ExprAST("Variable"),
+			type(type),
 			name(name),
-			type(type) {}
+			assignment(assignment) {}
+
+		virtual void print(AstPrinter& printer) override {
+			//printer.print(type.c_str());
+			printer.print(name.c_str());
+			
+			if (assignment) {
+				assignment->print(printer);
+			}
+			// printer.print("(");
+			// printer.print(type.c_str());
+			// printer.print(")");
+		}
+	};
+
+	class ArgumentListAST : public ExprAST {
+	public:
+		std::vector<ExprAST*> arguments;
+
+		ArgumentListAST(std::vector<ExprAST*> arguments)
+			: ExprAST("ArgumentList"),
+			arguments(std::move(arguments)) {}
+
+
+		virtual void print(AstPrinter& printer) override {
+			printer.print("(");
+			for (auto* a : arguments) {
+				a->print(printer);
+			}
+			printer.print(")");
+		}
 	};
 
 	/// BinaryExprAST - Expression class for a binary operator.
@@ -58,44 +174,104 @@ namespace lang::parser {
 			type(type),
 			left(left),
 			right(right) {}
+
+		virtual void print(AstPrinter& printer) override {
+			left->print(printer);
+			printer.print(TokenType::toString(type));
+			right->print(printer);
+		}
 	};
 
 	/// CallExprAST - Expression class for function calls.
 	class CallExprAST : public ExprAST {
 		std::string callee;
-		std::vector<ExprAST*> args;
+		ArgumentListAST* args;
 
 	public:
-		CallExprAST(const std::string& callee, std::vector<ExprAST*> args)
+		CallExprAST(const std::string& callee, ArgumentListAST* args)
 			: ExprAST("Function call"),
 			callee(callee),
-			args(std::move(args)) {}
+			args(args) {}
+
+		virtual void print(AstPrinter& printer) override {
+			printer.print(callee.c_str());
+			args->print(printer);
+		}
+	};
+
+	/// CodeBlockAST - Anything inside of {} is considered a code block
+	class CodeBlockAST : public ExprAST {
+		std::vector<ExprAST*> body;
+
+	public:
+		CodeBlockAST(std::vector<ExprAST*> body)
+			: ExprAST("CodeBlock"),
+			body(body) {}
+
+		virtual void print(AstPrinter& printer) override {
+			printer.print("{");
+			for (auto* a : body) {
+				a->print(printer);
+			}
+			printer.print("}");
+		}
 	};
 
 	/// PrototypeAST - This class represents the "prototype" for a function,
 	/// which captures its name, and its argument names (thus implicitly the number
 	/// of arguments the function takes).
-	class FunctionDefAST {
-		std::string name;
-		std::vector<std::string> args;
-
+	class FunctionSignatureAST {
 	public:
-		FunctionDefAST(const std::string& name, std::vector<std::string> args)
+		std::string name;
+		ArgumentListAST* args;
+		ArgumentListAST* returnList;
+		// TODO: Add return list?
+
+		FunctionSignatureAST(const std::string& name, ArgumentListAST* args, ArgumentListAST* returnList)
 			: name(name),
-			args(std::move(args)) {}
+			args(args),
+			returnList(returnList) {}
 
 		const std::string& getName() const { return name; }
 	};
 
 	/// FunctionAST - This class represents a function definition itself.
-	class FunctionAST {
-		FunctionDefAST* proto;
-		ExprAST* body;
+	class FunctionAST : public ExprAST {
+		FunctionSignatureAST* proto;
+		CodeBlockAST* body;
 
 	public:
-		FunctionAST(FunctionDefAST* proto, ExprAST* body)
-			: proto(proto),
+		FunctionAST(FunctionSignatureAST* proto, CodeBlockAST* body)
+			: ExprAST("Function"),
+			proto(proto),
 			body(body) {}
+
+		virtual void print(AstPrinter& printer) override {
+			printer.print(proto->getName().c_str());
+			printer.print("(");
+			if (proto->args) {
+				proto->args->print(printer);
+			}
+			printer.print(")");
+
+			if (proto->returnList) {
+				printer.print("(");
+				proto->returnList->print(printer);
+				printer.print(")");
+			}
+
+			printer.print("{");
+			printer.indentation++;
+
+			if (body) {
+				printer.println("");
+				body->print(printer);
+				printer.println("");
+			}
+
+			printer.indentation--;
+			printer.print("}");
+		}
 	};
 
 	class IfAST : public ExprAST {
@@ -103,9 +279,9 @@ namespace lang::parser {
 		
 		struct ConditionAndBody {
 			BinaryExprAST* condition;
-			ExprAST* body;
+			CodeBlockAST* body;
 
-			ConditionAndBody(BinaryExprAST* condition, ExprAST* body)
+			ConditionAndBody(BinaryExprAST* condition, CodeBlockAST* body)
 				: condition(condition),
 				body(body) {}
 		};
@@ -113,25 +289,60 @@ namespace lang::parser {
 		// [0] = first if
 		// [1] = is else if
 		// [2] = is next else if... etc
-		std::vector<ConditionAndBody> condition;
+		std::vector<ConditionAndBody> chain;
 		bool hasElseAtEnd;
-		ExprAST* elseBody;
+		CodeBlockAST* elseBody;
 
 	public:
-		IfAST(std::vector<ConditionAndBody> condition, bool hasElseAtEnd, ExprAST* elseBody)
+		IfAST(std::vector<ConditionAndBody> condition, bool hasElseAtEnd, CodeBlockAST* elseBody)
 			: ExprAST("If"),
-			condition(condition),
+			chain(condition),
 			hasElseAtEnd(hasElseAtEnd),
 			elseBody(elseBody)
 		{
 		
+		}
+
+		virtual void print(AstPrinter& printer) override {
+			for (auto& a : chain) {
+				printer.print("if");
+				a.condition->print(printer);
+
+				if (a.body) {
+					printer.println("{");
+					printer.indentation++;
+					a.body->print(printer);
+					printer.indentation--;
+					printer.println("");
+					printer.println("}");
+				}
+			}
+
+			if (hasElseAtEnd) {
+				printer.print("else");
+
+				if (elseBody) {
+					printer.println("{");
+					printer.indentation++;
+					elseBody->print(printer);
+					printer.indentation--;
+					printer.println("}");
+				}
+			}
 		}
 	};
 
 	class ParserHelper {
 	public:
 		std::vector<lang::lexer::Token> tokens;
+		std::vector<ExprAST*> astNodes; // Root nodes (e.g. if with all child nodes)
+		std::vector<ExprAST*> astNodesFlat; // Flattened representation where all nodes are just added one after another.
+
 		size_t index;
+
+		// +1 for each {
+		// -1 for each }
+		size_t scopeDepth;
 
 		void eat(size_t count = 1) {
 			index += count;
@@ -158,6 +369,13 @@ namespace lang::parser {
 		}
 	};
 
+
+	ExprAST* identifier();
+	BinaryExprAST* binaryExpression(TokenType::Type terminator);
+	ArgumentListAST* argumentsDefinitionList(TokenType::Type terminator);
+	ArgumentListAST* argumentsList(TokenType::Type terminator);
+	ExprAST* expression();
+	CodeBlockAST* codeBlock();
 
 	std::vector<ExprAST*> parse(const std::vector<lang::lexer::Token>& tokens);
 }

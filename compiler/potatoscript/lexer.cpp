@@ -41,7 +41,7 @@ static bool isDigit(int c, int baseCount = 10) {
     return c >= '0' && c <= '9';
 }
 
-static bool continuesDigit(int c, int baseCount = 10) {
+static bool continuesDigit(char c, int baseCount = 10) {
 
     return isDigit(c, baseCount) || c == '.' || c == 'f' || c == 'u' || c == 'i';
 }
@@ -157,22 +157,30 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
     size_t lineNumber = 0;
 
     std::vector<Token> token;
-    for (size_t i = 0; i < s.size(); i++) {
+    size_t i = 0;
+
+    while(i < s.size()) {
+    //for (size_t i = 0; i < s.size(); i++) {
         char c = s[i];
-        
+
         if (isLineBreak(c)) {
             lineNumber++;
+            i++;
             continue;
         }
 
         // TODO: only ignore if we're not inside a string atm...
         if (isWhitespace(c)) {
+            i++;
             continue;
         }
 
         if (isCommentStart(s, i)) {
             size_t commentLength = countUntilCharacter(s, i, eol);
-            
+            if (commentLength < 2) {
+                commentLength = s.size() - i; // Go to end of the file
+            }
+
             std::string s2 = s.substr(i, commentLength);
             Token t{
                 .type = TokenType::COMMENT,
@@ -188,6 +196,16 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             token.push_back(t);
 
             i += commentLength;
+            lineNumber++;
+            continue;
+        }
+
+        if (c == '"') {
+            size_t stringLength = countUntilCharacter(s, i + 1, '"');
+            i += 1; // + 1 for "
+            token.push_back(createSingleToken(TokenType::STRING, s, lineNumber, i, stringLength));
+            i += 1; // + 1 for "
+            i += stringLength;
             continue;
         }
 
@@ -224,15 +242,12 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             //size_t l2 = countUntilCharacter(s, i, eol);
             //size_t identifierLength = minButNot0(l1, l2);
 
-            size_t start = i;
-            size_t end = i;
-            while (continuesIdentifier(c)) {
-                c = s[end];
-                end++;
+            size_t length = 0;
+            while (continuesIdentifier(s[i + length])) {
+                length++;
             }
-            end--;
 
-            std::string str = s.substr(start, end - start);
+            std::string str = s.substr(i, length);
             TokenType::Type type;
             if (tryGetReservedBasicType(str, &type)) {
                 Token t{
@@ -240,13 +255,13 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
                     .span = TextSpan {
                         .string = str,
                         .line = lineNumber,
-                        .from = start,
-                        .to = end,
+                        .from = i,
+                        .to = i + length,
                     },
                     .fileName = "undefined", // TODO: Assign...
                 };
 
-                i += end - start - 1;
+                i += length;
                 token.push_back(t);
                 continue;
             }
@@ -256,13 +271,13 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
                 .span = TextSpan {
                     .string = str,
                     .line = lineNumber,
-                    .from = start,
-                    .to = end,
+                    .from = i,
+                    .to = i + length,
                 },
                 .fileName = "undefined", // TODO: Assign...
             };
 
-            i += end - start - 1;
+            i += length;
             token.push_back(t);
             continue;
         }
@@ -282,49 +297,65 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             continue;
         }
 
+        if (c == ',') {
+            token.push_back(createSingleToken(TokenType::COMMA, s, lineNumber, i, 1));
+            i++;
+            continue;
+        }
 
         if (c == '(') {
             token.push_back(createSingleToken(TokenType::LEFT_PAREN, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == ')') {
             token.push_back(createSingleToken(TokenType::RIGHT_PAREN, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '{') {
             token.push_back(createSingleToken(TokenType::LEFT_CURLY, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '}') {
             token.push_back(createSingleToken(TokenType::RIGHT_CURLY, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '[') {
             token.push_back(createSingleToken(TokenType::LEFT_BRACKET, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == ']') {
             token.push_back(createSingleToken(TokenType::RIGHT_BRACKET, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '+') {
             token.push_back(createSingleToken(TokenType::PLUS, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '-') {
             token.push_back(createSingleToken(TokenType::MINUS, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '=') {
             token.push_back(createSingleToken(TokenType::EQUALS, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '<') {
             token.push_back(createSingleToken(TokenType::LEFT_ANGLE, s, lineNumber, i, 1));
+            i++;
             continue;
         }
         else if (c == '>') {
             token.push_back(createSingleToken(TokenType::RIGHT_ANGLE, s, lineNumber, i, 1));
+            i++;
             continue;
         }
 
@@ -332,45 +363,42 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
 
 
         if (isDigit(c)) {
-            size_t start = i;
-            size_t end = i;
-            while (continuesDigit(c)) {
-                c = s[end];
-                end++;
+            size_t length = 0;
+            while (continuesDigit(s[i + length])) {
+                length++;
             }
-            end--;
 
-            std::string s2 = s.substr(i, end - start);
+            std::string s2 = s.substr(i, length);
 
-            TokenType::Type type = TokenType::INTEGER;
+            TokenType::Type type = TokenType::INTEGER32;
             if (s2.find(".") != -1) type = TokenType::FLOAT32;
             if (s2.ends_with("f32")) type = TokenType::FLOAT32;
             if (s2.ends_with("f64")) type = TokenType::FLOAT64;
 
-            if (s2.ends_with("u8")) type = TokenType::INTEGER;
-            if (s2.ends_with("u16")) type = TokenType::INTEGER;
-            if (s2.ends_with("u32")) type = TokenType::INTEGER;
-            if (s2.ends_with("u64")) type = TokenType::INTEGER;
+            if (s2.ends_with("u8")) type = TokenType::INTEGER32;
+            if (s2.ends_with("u16")) type = TokenType::INTEGER32;
+            if (s2.ends_with("u32")) type = TokenType::INTEGER32;
+            if (s2.ends_with("u64")) type = TokenType::INTEGER64;
 
-            if (s2.ends_with("i8")) type = TokenType::INTEGER;
-            if (s2.ends_with("i16")) type = TokenType::INTEGER;
-            if (s2.ends_with("i32")) type = TokenType::INTEGER;
-            if (s2.ends_with("i64")) type = TokenType::INTEGER;
+            if (s2.ends_with("i8")) type = TokenType::INTEGER32;
+            if (s2.ends_with("i16")) type = TokenType::INTEGER32;
+            if (s2.ends_with("i32")) type = TokenType::INTEGER32;
+            if (s2.ends_with("i64")) type = TokenType::INTEGER64;
 
             Token t{
                 .type = type,
                 .span = TextSpan {
                     .string = s2,
                     .line = lineNumber,
-                    .from = start,
-                    .to = end,
+                    .from = i,
+                    .to = i + length,
                 },
                 .fileName = "undefined", // TODO: Assign...
             };
 
             token.push_back(t);
 
-            i += end - start - 1;
+            i += length;
             continue;
         }
 
