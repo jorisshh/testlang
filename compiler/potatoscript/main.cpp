@@ -1,4 +1,6 @@
-﻿#include <Windows.h>
+﻿#define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING 1
+
+#include <Windows.h>
 #include <assert.h>
 #include <iostream>
 #include <string>

@@ -51,5 +51,6 @@
   <ItemGroup>
     <None Include="files\1.potato" />
     <None Include="files\2.potato" />
+    <None Include="files\3.potato" />
   </ItemGroup>
 </Project>

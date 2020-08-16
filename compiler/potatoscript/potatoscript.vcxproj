@@ -29,7 +29,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>ClangCL</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -42,7 +42,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>ClangCL</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -89,10 +89,12 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Projects\PotatoScript\compiler\deps\llvm11\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMCore.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMSupport.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMBinaryFormat.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMRemarks.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMBitstreamReader.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMDemangle.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -104,12 +106,14 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Projects\PotatoScript\compiler\deps\llvm-10.0.1.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMCore.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMSupport.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMBinaryFormat.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMRemarks.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMBitstreamReader.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMDemangle.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -119,10 +123,12 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Projects\PotatoScript\compiler\deps\llvm11\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMCore.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMSupport.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMBinaryFormat.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMRemarks.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMBitstreamReader.lib;$(MSBuildProjectDirectory)\..\deps\llvm11\Debug\lib\LLVMDemangle.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -134,12 +140,14 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Projects\PotatoScript\compiler\deps\llvm-10.0.1.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMCore.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMSupport.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMBinaryFormat.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMRemarks.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMBitstreamReader.lib;$(MSBuildProjectDirectory)\..\deps\llvm-10.0.1.src\Debug\lib\LLVMDemangle.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -157,6 +165,7 @@
   <ItemGroup>
     <None Include="files\1.potato" />
     <None Include="files\2.potato" />
+    <None Include="files\3.potato" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

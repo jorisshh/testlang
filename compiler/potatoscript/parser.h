@@ -8,6 +8,11 @@
 
 using namespace lang::lexer;
 
+namespace llvm {
+	class Value;
+	class Function;
+}
+
 namespace lang::parser {
 
 	class AstPrinter {
@@ -48,6 +53,8 @@ namespace lang::parser {
 		virtual ~ExprAST() {}
 
 		virtual void print(AstPrinter& printer) = 0;
+		virtual llvm::Value* codegen() = 0;
+
 
 		virtual std::string prettyName() {
 			return type;
@@ -56,39 +63,45 @@ namespace lang::parser {
 
 	/// Expression class for numeric literals like "1.0".
 	class NumberExprAST : public ExprAST {
-		double float64Value;
-		float float32Value;
 
-		int32_t int32Value;
-		int64_t int64Value;
+		union Value {
+			double float64Value;
+			float float32Value;
 
+			int32_t int32Value;
+			int64_t int64Value;
+		};
+
+		Value value;
 		TokenType::Type type;
 
 	public:
-		NumberExprAST(float val) : ExprAST("Number"), float32Value(val), type(TokenType::FLOAT32) {}
-		NumberExprAST(double val) : ExprAST("Number"), float64Value(val), type(TokenType::FLOAT64) {}
-		NumberExprAST(int32_t val) : ExprAST("Number"), int32Value(val), type(TokenType::INTEGER32) {}
-		NumberExprAST(int64_t val) : ExprAST("Number"), int64Value(val), type(TokenType::INTEGER64) {}
+		NumberExprAST(float val) : ExprAST("Number"), value({ .float32Value = val }), type(TokenType::FLOAT32) {}
+		NumberExprAST(double val) : ExprAST("Number"), value({ .float64Value = val }), type(TokenType::FLOAT64) {}
+		NumberExprAST(int32_t val) : ExprAST("Number"), value({ .int32Value = val }), type(TokenType::INTEGER32) {}
+		NumberExprAST(int64_t val) : ExprAST("Number"), value({ .int64Value = val}), type(TokenType::INTEGER64) {}
 
 		virtual void print(AstPrinter& printer) override {
 			switch (type)
 			{
 			case TokenType::FLOAT32:
-				printer.print(std::to_string(float32Value).c_str());
+				printer.print(std::to_string(value.float32Value).c_str());
 				break;
 			case TokenType::FLOAT64:
-				printer.print(std::to_string(float64Value).c_str());
+				printer.print(std::to_string(value.float64Value).c_str());
 				break;
 			case TokenType::INTEGER32:
-				printer.print(std::to_string(int32Value).c_str());
+				printer.print(std::to_string(value.int32Value).c_str());
 				break;
 			case TokenType::INTEGER64:
-				printer.print(std::to_string(int64Value).c_str());
+				printer.print(std::to_string(value.int64Value).c_str());
 				break;
 			default:
 				break;
 			}
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	class ConstantStringExpr : public ExprAST {
@@ -102,6 +115,8 @@ namespace lang::parser {
 			printer.buffer += stringValue.c_str();
 			printer.buffer += "\" ";
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	class ReturnAST : public ExprAST {
@@ -116,6 +131,8 @@ namespace lang::parser {
 				value->print(printer);
 			}
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	class VariableExprAST : public ExprAST {
@@ -142,6 +159,8 @@ namespace lang::parser {
 			// printer.print(type.c_str());
 			// printer.print(")");
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	class ArgumentListAST : public ExprAST {
@@ -159,7 +178,10 @@ namespace lang::parser {
 				a->print(printer);
 			}
 			printer.print(")");
+			printer.print(prettyName().c_str());
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	/// BinaryExprAST - Expression class for a binary operator.
@@ -180,6 +202,8 @@ namespace lang::parser {
 			printer.print(TokenType::toString(type));
 			right->print(printer);
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	/// CallExprAST - Expression class for function calls.
@@ -197,13 +221,15 @@ namespace lang::parser {
 			printer.print(callee.c_str());
 			args->print(printer);
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	/// CodeBlockAST - Anything inside of {} is considered a code block
 	class CodeBlockAST : public ExprAST {
-		std::vector<ExprAST*> body;
-
 	public:
+		std::vector<ExprAST*> body;
+		
 		CodeBlockAST(std::vector<ExprAST*> body)
 			: ExprAST("CodeBlock"),
 			body(body) {}
@@ -214,17 +240,20 @@ namespace lang::parser {
 				a->print(printer);
 			}
 			printer.print("}");
+			printer.print(prettyName().c_str());
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
-	/// PrototypeAST - This class represents the "prototype" for a function,
+	/// FunctionSignatureAST - This class represents the "prototype" or "signature" for a function,
 	/// which captures its name, and its argument names (thus implicitly the number
 	/// of arguments the function takes).
 	class FunctionSignatureAST {
 	public:
 		std::string name;
 		ArgumentListAST* args;
-		ArgumentListAST* returnList;
+		ArgumentListAST* returnList; // TODO: Convert to tuple?
 		// TODO: Add return list?
 
 		FunctionSignatureAST(const std::string& name, ArgumentListAST* args, ArgumentListAST* returnList)
@@ -233,30 +262,32 @@ namespace lang::parser {
 			returnList(returnList) {}
 
 		const std::string& getName() const { return name; }
+
+		llvm::Function* codegen();
 	};
 
 	/// FunctionAST - This class represents a function definition itself.
 	class FunctionAST : public ExprAST {
-		FunctionSignatureAST* proto;
+		FunctionSignatureAST* signature;
 		CodeBlockAST* body;
 
 	public:
-		FunctionAST(FunctionSignatureAST* proto, CodeBlockAST* body)
+		FunctionAST(FunctionSignatureAST* sig, CodeBlockAST* body)
 			: ExprAST("Function"),
-			proto(proto),
+			signature(sig),
 			body(body) {}
 
 		virtual void print(AstPrinter& printer) override {
-			printer.print(proto->getName().c_str());
+			printer.print(signature->getName().c_str());
 			printer.print("(");
-			if (proto->args) {
-				proto->args->print(printer);
+			if (signature->args) {
+				signature->args->print(printer);
 			}
 			printer.print(")");
 
-			if (proto->returnList) {
+			if (signature->returnList) {
 				printer.print("(");
-				proto->returnList->print(printer);
+				signature->returnList->print(printer);
 				printer.print(")");
 			}
 
@@ -272,6 +303,8 @@ namespace lang::parser {
 			printer.indentation--;
 			printer.print("}");
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	class IfAST : public ExprAST {
@@ -330,6 +363,8 @@ namespace lang::parser {
 				}
 			}
 		}
+
+		virtual llvm::Value* codegen() override;
 	};
 
 	class ParserHelper {

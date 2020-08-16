@@ -1,0 +1,14 @@
+// import core.fmt
+
+
+// NOTE: impl ignores i32 and assumes f32 at the moment
+fn print(i32 a) i32 {
+	// Ignored for now...
+
+	return 0
+}
+
+fn main() i32 {
+	print(3f32)
+	return 0
+}

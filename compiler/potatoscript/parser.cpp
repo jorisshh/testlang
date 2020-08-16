@@ -1,23 +1,35 @@
+#define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING 1
+
 #include "parser.h"
+
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/APSint.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
 
 #include <iostream>
 #include "parser.h"
 
+
 using namespace lang::lexer;
 using namespace lang::parser;
 
-//void assert(bool b, const char* msg = nullptr) {
-//	if (b == false) {
-//		if (msg) {
-//			std::cerr << msg;
-//		}
-//
-//		std::abort();
-//		return;
-//	}
-//}
+// Code generation
+static llvm::LLVMContext llvmContext;
+static llvm::IRBuilder<> llvmBuilder(llvmContext);
+static std::unique_ptr<llvm::Module> llvmModule;
+static std::map<std::string, llvm::Value*> llvmNamedValues;
 
-ParserHelper p;
+static ParserHelper p;
 
 template <typename T, class ...Args>
 static T* createAst(Args&&... args) {
@@ -47,7 +59,7 @@ static bool isConstant(TokenType::Type t) {
 		t == TokenType::STRING;
 }
 
-void assert(bool b, const Token& token, const char* msg) {
+void assert2(bool b, const Token& token, const char* msg) {
 	if (b == false) {
 		std::printf(msg, token.span.line, token.span.from, token.span.to);
 		//std::cerr << buff << '\n';
@@ -108,9 +120,9 @@ ExprAST* lang::parser::identifier() {
 BinaryExprAST* lang::parser::binaryExpression(TokenType::Type terminator) {
 
 	auto& current = p.current();
-	assert(isIdentifier(current.type) || isConstant(current.type), current, "");
-	assert(isOperator(p.next().type), p.next(), "");
-	assert(isIdentifier(p.next(2).type) || isConstant(p.next(2).type), p.next(2), "");
+	assert2(isIdentifier(current.type) || isConstant(current.type), current, "");
+	assert2(isOperator(p.next().type), p.next(), "");
+	assert2(isIdentifier(p.next(2).type) || isConstant(p.next(2).type), p.next(2), "");
 
 	ExprAST* left = nullptr;
 	ExprAST* right = nullptr;
@@ -139,7 +151,7 @@ VariableExprAST* variableExpr() {
 ArgumentListAST* lang::parser::argumentsDefinitionList(TokenType::Type terminator) {
 	std::vector<ExprAST*> args;
 
-	assert(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
+	assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
 	p.eat(); // Eat "("
 
 	while (p.current().type != terminator) {
@@ -157,16 +169,17 @@ ArgumentListAST* lang::parser::argumentsDefinitionList(TokenType::Type terminato
 		std::abort();
 	}
 
-	assert(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
+	assert2(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
 	p.eat(); // Eat ")"
 
 	return createAst<ArgumentListAST>(args);
 }
 
+// The argumengs you pass into a function, e.g. variable list
 ArgumentListAST* lang::parser::argumentsList(TokenType::Type terminator) {
 	std::vector<ExprAST*> args;
 
-	assert(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
+	assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
 	p.eat(); // Eat "("
 
 	while (p.current().type != terminator) {
@@ -181,10 +194,10 @@ ArgumentListAST* lang::parser::argumentsList(TokenType::Type terminator) {
 		}
 
 		std::abort();
-		//assert(p.current().type == terminator || p.current().type == TokenType::COMMA, p.current(), "Expected ) or ,");
+		//assert2(p.current().type == terminator || p.current().type == TokenType::COMMA, p.current(), "Expected ) or ,");
 	}
 
-	assert(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
+	assert2(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
 	p.eat(); // Eat ")"
 
 	return createAst<ArgumentListAST>(args);
@@ -193,7 +206,7 @@ ArgumentListAST* lang::parser::argumentsList(TokenType::Type terminator) {
 CodeBlockAST* lang::parser::codeBlock()
 {
 	size_t scopeDepthBefore = p.scopeDepth;
-	assert(p.current().type == TokenType::LEFT_CURLY, p.current(), "Expected {");
+	assert2(p.current().type == TokenType::LEFT_CURLY, p.current(), "Expected {");
 	p.eat();
 
 	p.scopeDepth++;
@@ -209,7 +222,7 @@ CodeBlockAST* lang::parser::codeBlock()
 		}
 	}
 
-	//assert(p.current().type == TokenType::RIGHT_CURLY, p.current(), "Expected }");
+	//assert2(p.current().type == TokenType::RIGHT_CURLY, p.current(), "Expected }");
 	//p.eat();
 
 	return createAst<CodeBlockAST>(codeBlock);
@@ -295,7 +308,7 @@ ExprAST* lang::parser::expression() {
 		auto& name = p.current();
 		p.eat();
 
-		assert(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
+		assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
 		auto args = argumentsDefinitionList(TokenType::RIGHT_PAREN);
 		
 		ArgumentListAST* returnList = nullptr;
@@ -325,7 +338,7 @@ ExprAST* lang::parser::expression() {
 
 
 	//auto& next = p.next();
-	//assert(next.type == TokenType::IDENTIFIER || isConstant(next.type), next, "Expected identifier at line: %d and token: %d - %d");
+	//assert2(next.type == TokenType::IDENTIFIER || isConstant(next.type), next, "Expected identifier at line: %d and token: %d - %d");
 	//identifier();
 
 	//auto& next2 = tokens[index + 1];
@@ -334,7 +347,7 @@ ExprAST* lang::parser::expression() {
 	//}
 
 	//auto& next3 = tokens[index + 1];
-	//assert(next3.type == TokenType::IDENTIFIER || isConstant(next3.type), next3, "Expected identifier at line: %d and token: %d - %d");
+	//assert2(next3.type == TokenType::IDENTIFIER || isConstant(next3.type), next3, "Expected identifier at line: %d and token: %d - %d");
 	//identifier(tokens, index + 1);
 
 	std::cerr << "undefined token type:: " << TokenType::toString(p.current().type) << "\n";
@@ -343,38 +356,21 @@ ExprAST* lang::parser::expression() {
 	return nullptr;
 }
 
-//void ifKeyword() {
-//	
-//	p.eat(); // eat if
-//
-//	size_t counter = 0;
-//	for (size_t i = p.index; i < p.tokens.size(); i++) {
-//		if (p.tokens[i].type == TokenType::LEFT_CURLY) {
-//			break;
-//		}
-//
-//		counter++;
-//	}
-//
-//	std::cout << "if has " << counter << " tokens";
-//
-//	auto& current = p.current();
-//	p.eat(); // Eat current
-//
-//	auto* node = expression();
-//
-//
-//
-//	auto& next = p.next();
-//	
-//
-//	expression();
-//
-//	error(next.type != TokenType::LEFT_CURLY, next, "Expected identifier at line: %d and token: %d - %d");
-//}
+/// LogError* - These are little helper functions for error handling.
+ExprAST* LogError(const char* str) {
+	fprintf(stderr, "Error: %s\n", str);
+	return nullptr;
+}
+
+llvm::Value* LogErrorV(const char* str) {
+	LogError(str);
+	return nullptr;
+}
 
 std::vector<ExprAST*> lang::parser::parse(const std::vector<Token>& tokens)
 {
+	llvmModule = std::make_unique<llvm::Module>("potatoscript", llvmContext);
+
 	p.tokens = std::move(tokens);
 	p.index = 0;
 
@@ -386,10 +382,217 @@ std::vector<ExprAST*> lang::parser::parse(const std::vector<Token>& tokens)
 		}
 	}
 	catch (std::exception* e) {
-		return std::move(p.astNodes);
+		// Ignored (used to escape parsing, kind of ugly...)
 	}
 	
+	for (auto* n : p.astNodes) {
+		if (n == nullptr) continue;
+
+		auto* r = n->codegen();
+		r->print(llvm::errs());
+	}
+
+	llvmModule->print(llvm::errs(), nullptr);
 	return std::move(p.astNodes);
 }
 
+llvm::Value* lang::parser::NumberExprAST::codegen()
+{
+	switch (type) {
+	case TokenType::FLOAT32: return llvm::ConstantFP::get(llvmContext, llvm::APFloat(value.float32Value));
+	case TokenType::FLOAT64: return llvm::ConstantFP::get(llvmContext, llvm::APFloat(value.float64Value));
+	case TokenType::INTEGER32: return llvm::ConstantInt::get(llvmContext, llvm::APInt(32, value.int32Value, true));
+	case TokenType::INTEGER64: return llvm::ConstantInt::get(llvmContext, llvm::APInt(64, value.int64Value, true));
+	// TODO: Add unsigned integers
+	}
+	
+	return LogErrorV("Value type not found");
+}
 
+llvm::Value* lang::parser::ConstantStringExpr::codegen()
+{
+	return LogErrorV("Not imlemented");
+}
+
+llvm::Value* lang::parser::ReturnAST::codegen()
+{
+	auto* v = value->codegen();
+	return llvm::ReturnInst::Create(llvmContext, v);
+}
+
+llvm::Value* lang::parser::VariableExprAST::codegen()
+{
+	llvm::Value* v = llvmNamedValues.at(name);
+	assert(v != nullptr);
+
+	return v;
+}
+
+llvm::Value* lang::parser::ArgumentListAST::codegen()
+{
+	return LogErrorV("Not imlemented");
+
+	//for (auto* t : arguments) {
+	//	llvmNamedValues[t->name] = t->codegen();
+	//}
+
+}
+
+llvm::Value* lang::parser::BinaryExprAST::codegen()
+{
+	llvm::Value* l = left->codegen();
+	llvm::Value* r = right->codegen();
+	if (!l || !r)
+	{
+		return LogErrorV("Binary expression failed, couldn't find left and/or righgt");
+	}
+
+	switch (type) {
+	case TokenType::PLUS: return llvmBuilder.CreateFAdd(l, r, "addtmp");
+	case TokenType::MINUS: return llvmBuilder.CreateFSub(l, r, "subtmp");
+	case TokenType::STAR: return llvmBuilder.CreateFMul(l, r, "multmp");
+	case TokenType::SLASH: return llvmBuilder.CreateFDiv(l, r, "divtmp");
+	case TokenType::LEFT_ANGLE: return llvmBuilder.CreateFCmpOGT(l, r, "gttmp");
+	case TokenType::RIGHT_ANGLE: return llvmBuilder.CreateFCmpOLT(l, r, "lttmp");
+	}
+
+	return LogErrorV("Binary expression failed, did not recognize binary op");
+}
+
+llvm::Value* lang::parser::CallExprAST::codegen()
+{
+	llvm::Function* function = llvmModule->getFunction(callee);
+	if (function == nullptr) {
+		return LogErrorV("Couldn't find function in module");
+	}
+
+	if (function->arg_size() != args->arguments.size()) {
+		return LogErrorV("Argument list mismatch. Expected: %d, Given: %d");
+	}
+
+	std::vector<llvm::Value*> llvmArgs;
+	for (size_t i = 0; i < args->arguments.size(); i++) {
+		llvm::Value* arg = args->arguments[i]->codegen();
+		if (arg == nullptr) {
+			LogError("Couldn't gen code for argument...");
+		}
+
+		llvmArgs.push_back(arg);
+	}
+
+	return llvmBuilder.CreateCall(function, llvmArgs, "calltmp");
+}
+
+llvm::Function* lang::parser::FunctionSignatureAST::codegen()
+{
+	std::vector<llvm::Type*> params;
+	for (auto* t : args->arguments) {
+		params.push_back(llvm::Type::getFloatTy(llvmContext)); // TODO: Make sure this is the right type
+		//params.push_back(static_cast<VariableExprAST*>(t)->type);
+		//params.push_back(t->codegen()->getType()); // NOTE: Not sure if this is valid...?
+	}
+
+	llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getFloatTy(llvmContext), params, false);
+	llvm::Function* f = llvm::Function::Create(ft, llvm::GlobalValue::LinkageTypes::ExternalLinkage, name, llvmModule.get());
+	
+	size_t index = 0;
+	for (auto& arg : f->args()) {
+		arg.setName(static_cast<VariableExprAST*>(args->arguments[index])->name);
+		index++;
+	}
+
+	return f;
+}
+
+llvm::Value* lang::parser::FunctionAST::codegen()
+{
+	llvm::Function* f = llvmModule->getFunction(signature->name);
+	if (f == nullptr) {
+		f = signature->codegen();
+	}
+
+	if (f == nullptr) {
+		return LogErrorV("Couldn't generate function implementation");
+	}
+
+	llvm::BasicBlock* llvmBody = llvm::BasicBlock::Create(llvmContext, "functionEntry", f);
+	llvmBuilder.SetInsertPoint(llvmBody);
+
+	llvmNamedValues.clear(); // Entering new scope, clear local variables list
+	
+	// Add arguments
+	for (auto& arg : f->args()) {
+		llvmNamedValues.try_emplace(arg.getName().str(), &arg);
+	}
+
+	// Add local scope variables
+	//for (auto* v : body->body) {
+	//	auto* variable = dynamic_cast<VariableExprAST*>(v);
+	//	if (variable) {
+	//		llvmNamedValues.try_emplace(variable->name, variable->codegen()); // Not sure if this is valid...
+	//	}
+	//}
+
+
+	llvm::Value* retValue = body->codegen();
+	if (retValue) {
+		llvmBuilder.CreateRet(retValue);
+		llvm::verifyFunction(*f);
+		return f;
+	}
+
+	f->eraseFromParent();
+	return LogErrorV("Couldn't generate function body");
+}
+
+llvm::Value* lang::parser::IfAST::codegen()
+{
+	llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
+
+	assert(chain.size() <= 1); // TODO: Add more later...
+	assert(hasElseAtEnd == false);
+
+	auto& a = chain[0];
+	llvm::Value* cond = a.condition->codegen();
+
+
+	//llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(llvmContext, "trueBlock", parentFunction);
+	//llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(llvmContext, "ifcont");
+	////llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(llvmContext, "falseBlock", parentFunction);
+	//llvm::BasicBlock* falseBlock = nullptr;
+
+	//llvm::Value* val = llvmBuilder.CreateCondBr(cond, trueBlock, falseBlock, nullptr, nullptr);
+	//
+	//llvmBuilder.SetInsertPoint(trueBlock);
+	//llvm::Value* trueBody = a.body->codegen();
+	//if (trueBody == nullptr) {
+	//	return LogErrorV("Couldn't generate code block for true branch of if statement");
+	//}
+
+	//llvmBuilder.CreateBr(mergeBB);
+	//trueBlock = llvmBuilder.GetInsertBlock();
+
+	//auto& functionBodyBlock = parentFunction->getBasicBlockList();
+	//functionBodyBlock.push_back(trueBlock);
+
+
+	return cond;
+}
+
+llvm::Value* lang::parser::CodeBlockAST::codegen()
+{
+	llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
+	
+	std::string name = "block1";
+	llvm::BasicBlock* block = llvm::BasicBlock::Create(llvmContext, name, parentFunction);
+	llvmBuilder.SetInsertPoint(block);
+	
+	for (auto* n : body) {
+		//auto& list = block->getInstList();
+		//list.addNodeToList(n->codegen());
+
+		auto* val = n->codegen();
+	}
+
+	return block;
+}

@@ -393,3 +393,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# deps
+compiler/deps/llvm11
