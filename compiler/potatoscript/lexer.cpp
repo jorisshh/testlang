@@ -230,7 +230,12 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             continue;
         }
 
-
+        if (isKeyword(s, i, "extern")) {
+            size_t identifierLength = 6;
+            token.push_back(createSingleToken(TokenType::KEYWORD_EXTERN, s, lineNumber, i, identifierLength));
+            i += identifierLength;
+            continue;
+        }
 
 
 
@@ -402,7 +407,8 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             continue;
         }
 
-        std::cout << "couldn't identify: " << c << "\n";
+        i++;
+        std::cout << "couldn't identify: " << c << " (ignoring)" << "\n";
     }
 
     return std::move(token);

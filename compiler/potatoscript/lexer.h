@@ -58,14 +58,10 @@ namespace lang::lexer {
 
             KEYWORD_FUNC,
             KEYWORD_VAR,
-            //KEYWORD_LET,
-            //KEYWORD_TYPEALIAS,
             KEYWORD_STRUCT,
-            //KEYWORD_UNION,
             KEYWORD_ENUM,
-            //KEYWORD_LIBRARY,
-            //KEYWORD_FRAMEWORK,
             KEYWORD_OPERATOR,
+            KEYWORD_EXTERN,
 
             KEYWORD_IF,
             //KEYWORD_WHEN,

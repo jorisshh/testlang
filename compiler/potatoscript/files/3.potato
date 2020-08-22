@@ -1,14 +1,8 @@
 // import core.fmt
 
-
-// NOTE: impl ignores i32 and assumes f32 at the moment
-fn print(i32 a) i32 {
-	// Ignored for now...
-
-	return 0
-}
+extern fn printf(string a)
 
 fn main() i32 {
-	print(3f32)
+	printf("Hello world!\n")
 	return 0
 }

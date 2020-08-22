@@ -229,10 +229,12 @@ namespace lang::parser {
 	class CodeBlockAST : public ExprAST {
 	public:
 		std::vector<ExprAST*> body;
+		ExprAST* returnValue;
 		
-		CodeBlockAST(std::vector<ExprAST*> body)
+		CodeBlockAST(std::vector<ExprAST*> body, ExprAST* returnValue = nullptr)
 			: ExprAST("CodeBlock"),
-			body(body) {}
+			body(body),
+			returnValue(returnValue) {}
 
 		virtual void print(AstPrinter& printer) override {
 			printer.print("{");
@@ -254,6 +256,7 @@ namespace lang::parser {
 		std::string name;
 		ArgumentListAST* args;
 		ArgumentListAST* returnList; // TODO: Convert to tuple?
+		bool isExternal;
 		// TODO: Add return list?
 
 		FunctionSignatureAST(const std::string& name, ArgumentListAST* args, ArgumentListAST* returnList)

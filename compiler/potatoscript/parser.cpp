@@ -222,12 +222,44 @@ CodeBlockAST* lang::parser::codeBlock()
 		}
 	}
 
-	//assert2(p.current().type == TokenType::RIGHT_CURLY, p.current(), "Expected }");
-	//p.eat();
+	ExprAST* returnValue = nullptr;
+	if (codeBlock.size() > 0 && codeBlock.back()->type == "Return") {
+		returnValue = codeBlock.back();
+	}
 
-	return createAst<CodeBlockAST>(codeBlock);
+	return createAst<CodeBlockAST>(codeBlock, returnValue);
 }
 
+ExprAST* parseFunction(bool isExternal) {
+	p.eat(); // eat func
+	auto& name = p.current();
+	p.eat();
+
+	assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
+	auto args = argumentsDefinitionList(TokenType::RIGHT_PAREN);
+
+	ArgumentListAST* returnList = nullptr;
+	if (p.current().type == TokenType::LEFT_PAREN) {
+		returnList = argumentsDefinitionList(TokenType::RIGHT_PAREN);
+	}
+
+	CodeBlockAST* body = nullptr;
+	if (isExternal == false) {
+		if (p.current().type != TokenType::LEFT_CURLY) {
+			auto* iden = identifier();
+			std::vector<ExprAST*> arguments;
+			arguments.push_back(iden);
+			returnList = createAst<ArgumentListAST>(arguments);
+		}
+
+		body = codeBlock();
+	}
+
+	auto* def = createAst<FunctionSignatureAST>(name.span.string, args, returnList);
+	def->isExternal = isExternal;
+
+	return createAst<FunctionAST>(def, body);
+}
 
 ExprAST* lang::parser::expression() {
 
@@ -303,30 +335,13 @@ ExprAST* lang::parser::expression() {
 		v.push_back(IfAST::ConditionAndBody(condition, body));
 		return createAst<IfAST>(v, false, nullptr);
 	}
+	case TokenType::KEYWORD_EXTERN: {
+		p.eat(); // Eat extern
+		assert2(p.current().type == TokenType::KEYWORD_FUNC, p.current(), "Expected keyword func");
+		return parseFunction(true);
+	}
 	case TokenType::KEYWORD_FUNC: {
-		p.eat(); // eat func
-		auto& name = p.current();
-		p.eat();
-
-		assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
-		auto args = argumentsDefinitionList(TokenType::RIGHT_PAREN);
-		
-		ArgumentListAST* returnList = nullptr;
-		if (p.current().type == TokenType::LEFT_PAREN) {
-			returnList = argumentsDefinitionList(TokenType::RIGHT_PAREN);
-		}
-		
-		if (p.current().type != TokenType::LEFT_CURLY) {
-			auto* iden = identifier();
-			std::vector<ExprAST*> arguments;
-			arguments.push_back(iden);
-			returnList = createAst<ArgumentListAST>(arguments);
-		}
-		
-		auto def = createAst<FunctionSignatureAST>(name.span.string, args, returnList);
-		auto* body = codeBlock();
-
-		return createAst<FunctionAST>(def, body);
+		return parseFunction(false);
 	}
 	default:
 		break;
@@ -411,12 +426,15 @@ llvm::Value* lang::parser::NumberExprAST::codegen()
 
 llvm::Value* lang::parser::ConstantStringExpr::codegen()
 {
-	return LogErrorV("Not imlemented");
+	llvm::Value* str = llvmBuilder.CreateGlobalStringPtr(stringValue);
+	return str;
 }
 
 llvm::Value* lang::parser::ReturnAST::codegen()
 {
 	auto* v = value->codegen();
+	
+	//llvmBuilder.SetInsertPoint()
 	return llvm::ReturnInst::Create(llvmContext, v);
 }
 
@@ -487,7 +505,19 @@ llvm::Function* lang::parser::FunctionSignatureAST::codegen()
 {
 	std::vector<llvm::Type*> params;
 	for (auto* t : args->arguments) {
-		params.push_back(llvm::Type::getFloatTy(llvmContext)); // TODO: Make sure this is the right type
+		
+		auto* v = static_cast<VariableExprAST*>(t);
+		if (v->type == "string") {
+			params.push_back(llvm::Type::getInt8PtrTy(llvmContext));
+		} else if (v->type == "f32") {
+			params.push_back(llvm::Type::getFloatTy(llvmContext));
+		} else if(v->type == "f64") {
+			params.push_back(llvm::Type::getDoubleTy(llvmContext));
+		}
+		else {
+			LogErrorV("Couldn't determine type...");
+		}
+
 		//params.push_back(static_cast<VariableExprAST*>(t)->type);
 		//params.push_back(t->codegen()->getType()); // NOTE: Not sure if this is valid...?
 	}
@@ -515,34 +545,35 @@ llvm::Value* lang::parser::FunctionAST::codegen()
 		return LogErrorV("Couldn't generate function implementation");
 	}
 
-	llvm::BasicBlock* llvmBody = llvm::BasicBlock::Create(llvmContext, "functionEntry", f);
-	llvmBuilder.SetInsertPoint(llvmBody);
-
 	llvmNamedValues.clear(); // Entering new scope, clear local variables list
 	
-	// Add arguments
-	for (auto& arg : f->args()) {
-		llvmNamedValues.try_emplace(arg.getName().str(), &arg);
+
+	if (signature->isExternal == false) {
+		llvm::BasicBlock* llvmBody = llvm::BasicBlock::Create(llvmContext, "entry", f);
+		llvmBuilder.SetInsertPoint(llvmBody);
+
+		// Add arguments
+		for (auto& arg : f->args()) {
+			llvmNamedValues.try_emplace(arg.getName().str(), &arg);
+		}
+
+		// Add local scope variables
+		//for (auto* v : body->body) {
+		//	auto* variable = dynamic_cast<VariableExprAST*>(v);
+		//	if (variable) {
+		//		llvmNamedValues.try_emplace(variable->name, variable->codegen()); // Not sure if this is valid...
+		//	}
+		//}
+
+		llvm::Value* retValue = body->codegen();
+		if (retValue) {
+			llvmBuilder.CreateRet(retValue);
+			llvm::verifyFunction(*f);
+			return f;
+		}
 	}
 
-	// Add local scope variables
-	//for (auto* v : body->body) {
-	//	auto* variable = dynamic_cast<VariableExprAST*>(v);
-	//	if (variable) {
-	//		llvmNamedValues.try_emplace(variable->name, variable->codegen()); // Not sure if this is valid...
-	//	}
-	//}
-
-
-	llvm::Value* retValue = body->codegen();
-	if (retValue) {
-		llvmBuilder.CreateRet(retValue);
-		llvm::verifyFunction(*f);
-		return f;
-	}
-
-	f->eraseFromParent();
-	return LogErrorV("Couldn't generate function body");
+	return f;
 }
 
 llvm::Value* lang::parser::IfAST::codegen()
@@ -594,5 +625,9 @@ llvm::Value* lang::parser::CodeBlockAST::codegen()
 		auto* val = n->codegen();
 	}
 
-	return block;
+	if (returnValue) {
+		return returnValue->codegen();
+	}
+
+	return nullptr;
 }
