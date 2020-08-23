@@ -3,6 +3,13 @@
 extern fn printf(string a)
 
 fn main() i32 {
-	printf("Hello world!\n")
+	// i32 a = 0
+	// i32 b = 1
+	if 0 == 1 {
+		printf("Hello world!\n")
+		return 0
+	} 
+
+	printf("Bye world!\n")
 	return 0
 }

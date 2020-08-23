@@ -139,6 +139,7 @@ namespace lang::parser {
 	public:
 		std::string type;
 		std::string name;
+		bool isConstant;
 		
 		ExprAST* assignment;
 
@@ -146,7 +147,8 @@ namespace lang::parser {
 			: ExprAST("Variable"),
 			type(type),
 			name(name),
-			assignment(assignment) {}
+			assignment(assignment),
+			isConstant(false) {}
 
 		virtual void print(AstPrinter& printer) override {
 			//printer.print(type.c_str());

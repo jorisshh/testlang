@@ -2,6 +2,8 @@
 
 #include "parser.h"
 
+#include <iostream>
+#include <fstream>
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/APSint.h"
@@ -28,6 +30,31 @@ static llvm::LLVMContext llvmContext;
 static llvm::IRBuilder<> llvmBuilder(llvmContext);
 static std::unique_ptr<llvm::Module> llvmModule;
 static std::map<std::string, llvm::Value*> llvmNamedValues;
+
+class LLVMOutputStream : public llvm::raw_ostream {
+public:
+
+	std::ofstream outputFile;
+
+	LLVMOutputStream(const std::string& filename) {
+		outputFile.open(filename);
+	}
+
+	~LLVMOutputStream() {
+		outputFile.close();
+	}
+
+	// Inherited via raw_ostream
+	virtual void write_impl(const char* ptr, size_t size) override
+	{
+		outputFile.write(ptr, static_cast<std::streamsize>(size));
+	}
+
+	virtual uint64_t current_pos() const override
+	{
+		return outputFile.cur;
+	}
+};
 
 static ParserHelper p;
 
@@ -56,7 +83,9 @@ static bool isConstant(TokenType::Type t) {
 		t == TokenType::INTEGER64 ||
 		t == TokenType::FLOAT32 ||
 		t == TokenType::FLOAT64 ||
-		t == TokenType::STRING;
+		t == TokenType::STRING ||
+		t == TokenType::KEYWORD_TRUE ||
+		t == TokenType::KEYWORD_FALSE;
 }
 
 void assert2(bool b, const Token& token, const char* msg) {
@@ -303,6 +332,18 @@ ExprAST* lang::parser::expression() {
 
 		return createAst<ReturnAST>(value);
 	}
+	case TokenType::KEYWORD_TRUE: {
+		p.eat();
+		auto* a = createAst<VariableExprAST>("bool", "1", nullptr);
+		a->isConstant = true;
+		return a;
+	}
+	case TokenType::KEYWORD_FALSE: {
+		p.eat();
+		auto* a = createAst<VariableExprAST>("bool", "0", nullptr);
+		a->isConstant = true;
+		return a;
+	}
 	case TokenType::EQUALS:
 	case TokenType::PLUS:
 	case TokenType::MINUS:
@@ -401,13 +442,12 @@ std::vector<ExprAST*> lang::parser::parse(const std::vector<Token>& tokens)
 	}
 	
 	for (auto* n : p.astNodes) {
-		if (n == nullptr) continue;
-
-		auto* r = n->codegen();
-		r->print(llvm::errs());
+		n->codegen();
 	}
 
-	llvmModule->print(llvm::errs(), nullptr);
+	LLVMOutputStream output("../ir_output.ll");
+	llvmModule->print(output, nullptr, false, true);
+
 	return std::move(p.astNodes);
 }
 
@@ -440,10 +480,21 @@ llvm::Value* lang::parser::ReturnAST::codegen()
 
 llvm::Value* lang::parser::VariableExprAST::codegen()
 {
-	llvm::Value* v = llvmNamedValues.at(name);
-	assert(v != nullptr);
+	if (isConstant) {
+		if (type == "bool") {
+			return llvm::ConstantInt::get(llvmContext, llvm::APInt(1, std::stoi(name)));
+		}
 
-	return v;
+		// Constant struct
+
+		return LogErrorV("Couldn't determine constant type");
+	}
+	else {
+		llvm::Value* v = llvmNamedValues.at(name);
+		assert(v != nullptr);
+
+		return v;
+	}
 }
 
 llvm::Value* lang::parser::ArgumentListAST::codegen()
@@ -472,6 +523,8 @@ llvm::Value* lang::parser::BinaryExprAST::codegen()
 	case TokenType::SLASH: return llvmBuilder.CreateFDiv(l, r, "divtmp");
 	case TokenType::LEFT_ANGLE: return llvmBuilder.CreateFCmpOGT(l, r, "gttmp");
 	case TokenType::RIGHT_ANGLE: return llvmBuilder.CreateFCmpOLT(l, r, "lttmp");
+	case TokenType::EQ_OP: return llvmBuilder.CreateICmpEQ(l, r, "eqtmp"); // NOTE, FOR NOW ASSUMES INTS! FIX
+	case TokenType::NE_OP: return llvmBuilder.CreateICmpNE(l, r, "netmp"); // NOTE, FOR NOW ASSUMES INTS! FIX
 	}
 
 	return LogErrorV("Binary expression failed, did not recognize binary op");
@@ -580,31 +633,42 @@ llvm::Value* lang::parser::IfAST::codegen()
 {
 	llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
 
+	auto* startBlock = llvmBuilder.GetInsertBlock();
+
+
 	assert(chain.size() <= 1); // TODO: Add more later...
 	assert(hasElseAtEnd == false);
 
 	auto& a = chain[0];
 	llvm::Value* cond = a.condition->codegen();
 
+	llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(llvmContext, "trueblock", parentFunction);
+	llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(llvmContext, "falseblock", parentFunction);
+	llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(llvmContext, "ifcontinue");
 
-	//llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(llvmContext, "trueBlock", parentFunction);
-	//llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(llvmContext, "ifcont");
-	////llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(llvmContext, "falseBlock", parentFunction);
-	//llvm::BasicBlock* falseBlock = nullptr;
+	llvm::Value* val = llvmBuilder.CreateCondBr(cond, trueBlock, falseBlock, nullptr, nullptr);
+	
+	llvmBuilder.SetInsertPoint(trueBlock);
+	llvm::Value* trueBody = a.body->codegen();
+	if (trueBody == nullptr) {
+		return LogErrorV("Couldn't generate code block for true branch of if statement");
+	}
+	trueBlock = llvmBuilder.GetInsertBlock();
+	trueBlock->insertInto(parentFunction);
 
-	//llvm::Value* val = llvmBuilder.CreateCondBr(cond, trueBlock, falseBlock, nullptr, nullptr);
-	//
-	//llvmBuilder.SetInsertPoint(trueBlock);
-	//llvm::Value* trueBody = a.body->codegen();
-	//if (trueBody == nullptr) {
-	//	return LogErrorV("Couldn't generate code block for true branch of if statement");
-	//}
+	//trueBlock->insertInto(parentFunction, nullptr);
+	//llvmBuilder.Insert(trueBody);
 
-	//llvmBuilder.CreateBr(mergeBB);
-	//trueBlock = llvmBuilder.GetInsertBlock();
+	llvmBuilder.SetInsertPoint(falseBlock);
+	llvmBuilder.CreateBr(continueBlock);
+	// TODO: Insert false body... (requires parser updates)
 
-	//auto& functionBodyBlock = parentFunction->getBasicBlockList();
-	//functionBodyBlock.push_back(trueBlock);
+
+
+	trueBlock = llvmBuilder.GetInsertBlock();
+
+	auto& functionBodyBlock = parentFunction->getBasicBlockList();
+	functionBodyBlock.push_back(continueBlock);
 
 
 	return cond;
