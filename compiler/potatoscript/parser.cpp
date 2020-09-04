@@ -149,9 +149,6 @@ ExprAST* lang::parser::identifier() {
 BinaryExprAST* lang::parser::binaryExpression(TokenType::Type terminator) {
 
 	auto& current = p.current();
-	assert2(isIdentifier(current.type) || isConstant(current.type), current, "");
-	assert2(isOperator(p.next().type), p.next(), "");
-	assert2(isIdentifier(p.next(2).type) || isConstant(p.next(2).type), p.next(2), "");
 
 	ExprAST* left = nullptr;
 	ExprAST* right = nullptr;
@@ -160,6 +157,10 @@ BinaryExprAST* lang::parser::binaryExpression(TokenType::Type terminator) {
 	auto& op = p.current();
 	p.eat(); // eat Op
 	right = expression();
+
+	//assert(left->type == "Function call" || left->type == "identifier");
+	//assert2(isOperator(p.next().type), p.next(), "");
+	//assert2(isIdentifier(p.next(2).type) || isConstant(p.next(2).type), p.next(2), "");
 
 	return createAst<BinaryExprAST>(op.type, left, right);
 }
@@ -254,6 +255,7 @@ CodeBlockAST* lang::parser::codeBlock()
 	ExprAST* returnValue = nullptr;
 	if (codeBlock.size() > 0 && codeBlock.back()->type == "Return") {
 		returnValue = codeBlock.back();
+		codeBlock.pop_back();
 	}
 
 	return createAst<CodeBlockAST>(codeBlock, returnValue);
@@ -475,7 +477,9 @@ llvm::Value* lang::parser::ReturnAST::codegen()
 	auto* v = value->codegen();
 	
 	//llvmBuilder.SetInsertPoint()
-	return llvm::ReturnInst::Create(llvmContext, v);
+	llvm::ReturnInst* inst =  llvm::ReturnInst::Create(llvmContext, v);
+	llvmBuilder.Insert(inst); // Not sure why this is needed, but k
+	return inst;
 }
 
 llvm::Value* lang::parser::VariableExprAST::codegen()
@@ -521,8 +525,8 @@ llvm::Value* lang::parser::BinaryExprAST::codegen()
 	case TokenType::MINUS: return llvmBuilder.CreateFSub(l, r, "subtmp");
 	case TokenType::STAR: return llvmBuilder.CreateFMul(l, r, "multmp");
 	case TokenType::SLASH: return llvmBuilder.CreateFDiv(l, r, "divtmp");
-	case TokenType::LEFT_ANGLE: return llvmBuilder.CreateFCmpOGT(l, r, "gttmp");
-	case TokenType::RIGHT_ANGLE: return llvmBuilder.CreateFCmpOLT(l, r, "lttmp");
+	case TokenType::LEFT_ANGLE: return llvmBuilder.CreateICmpSLT(l, r, "lttmp"); // NOTE, FOR NOW ASSUMES INTS! FIX
+	case TokenType::RIGHT_ANGLE: return llvmBuilder.CreateICmpSGT(l, r, "gttmp"); // NOTE, FOR NOW ASSUMES INTS! FIX
 	case TokenType::EQ_OP: return llvmBuilder.CreateICmpEQ(l, r, "eqtmp"); // NOTE, FOR NOW ASSUMES INTS! FIX
 	case TokenType::NE_OP: return llvmBuilder.CreateICmpNE(l, r, "netmp"); // NOTE, FOR NOW ASSUMES INTS! FIX
 	}
@@ -551,6 +555,10 @@ llvm::Value* lang::parser::CallExprAST::codegen()
 		llvmArgs.push_back(arg);
 	}
 
+	if (function->getReturnType() == llvm::Type::getVoidTy(llvmContext)) {
+		return llvmBuilder.CreateCall(function, llvmArgs);
+	}
+
 	return llvmBuilder.CreateCall(function, llvmArgs, "calltmp");
 }
 
@@ -567,6 +575,12 @@ llvm::Function* lang::parser::FunctionSignatureAST::codegen()
 		} else if(v->type == "f64") {
 			params.push_back(llvm::Type::getDoubleTy(llvmContext));
 		}
+		else if (v->type == "i32") {
+			params.push_back(llvm::Type::getInt32Ty(llvmContext));
+		}
+		else if (v->type == "i64") {
+			params.push_back(llvm::Type::getInt64Ty(llvmContext));
+		}
 		else {
 			LogErrorV("Couldn't determine type...");
 		}
@@ -575,7 +589,20 @@ llvm::Function* lang::parser::FunctionSignatureAST::codegen()
 		//params.push_back(t->codegen()->getType()); // NOTE: Not sure if this is valid...?
 	}
 
-	llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getFloatTy(llvmContext), params, false);
+	llvm::Type* returnType = nullptr;
+	if (returnList && returnList->arguments.size() > 0) {
+		assert(returnList->arguments.size() <= 1 && "argument lists only support 1 type at the moment");
+		returnType = llvm::Type::getInt32Ty(llvmContext);
+		//returnType = returnList->arguments[0]->codegen()->getType();
+	}
+	else {
+		returnType = llvm::Type::getVoidTy(llvmContext);
+	}
+
+	// TODO: REMOVE THIS << So functions returns their proper value type
+	//returnType = llvm::Type::getInt32Ty(llvmContext);
+
+	llvm::FunctionType* ft = llvm::FunctionType::get(returnType, params, false);
 	llvm::Function* f = llvm::Function::Create(ft, llvm::GlobalValue::LinkageTypes::ExternalLinkage, name, llvmModule.get());
 	
 	size_t index = 0;
@@ -585,6 +612,16 @@ llvm::Function* lang::parser::FunctionSignatureAST::codegen()
 	}
 
 	return f;
+}
+
+llvm::Value* createDefaultValueReturnNode(llvm::Type* type) {
+	if (type == llvm::Type::getVoidTy(llvmContext)) {
+		return llvmBuilder.CreateRetVoid();
+	}
+
+	llvm::Value* v = llvm::Constant::getNullValue(type);
+	return llvmBuilder.CreateRet(v);
+
 }
 
 llvm::Value* lang::parser::FunctionAST::codegen()
@@ -619,11 +656,17 @@ llvm::Value* lang::parser::FunctionAST::codegen()
 		//}
 
 		llvm::Value* retValue = body->codegen();
-		if (retValue) {
-			llvmBuilder.CreateRet(retValue);
-			llvm::verifyFunction(*f);
-			return f;
+		if (retValue == nullptr) {
+			llvm::Type* returnType = f->getFunctionType()->getReturnType();
+			createDefaultValueReturnNode(returnType);
 		}
+
+		//if (retValue) {
+		//	//llvmBuilder.CreateRet(retValue);
+		//}
+
+		llvm::verifyFunction(*f);
+		return f;
 	}
 
 	return f;
@@ -632,64 +675,79 @@ llvm::Value* lang::parser::FunctionAST::codegen()
 llvm::Value* lang::parser::IfAST::codegen()
 {
 	llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
-
-	auto* startBlock = llvmBuilder.GetInsertBlock();
-
+	llvm::BasicBlock* startBlock = llvmBuilder.GetInsertBlock();
 
 	assert(chain.size() <= 1); // TODO: Add more later...
 	assert(hasElseAtEnd == false);
 
-	auto& a = chain[0];
-	llvm::Value* cond = a.condition->codegen();
-
-	llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(llvmContext, "trueblock", parentFunction);
-	llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(llvmContext, "falseblock", parentFunction);
+	llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(llvmContext, "trueblock");
+	llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(llvmContext, "falseblock");
 	llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(llvmContext, "ifcontinue");
 
-	llvm::Value* val = llvmBuilder.CreateCondBr(cond, trueBlock, falseBlock, nullptr, nullptr);
-	
-	llvmBuilder.SetInsertPoint(trueBlock);
-	llvm::Value* trueBody = a.body->codegen();
-	if (trueBody == nullptr) {
-		return LogErrorV("Couldn't generate code block for true branch of if statement");
+	auto& blockList = parentFunction->getBasicBlockList();
+	blockList.push_back(trueBlock);
+	blockList.push_back(falseBlock);
+	blockList.push_back(continueBlock);
+
+	//llvm::PHINode* pn = llvmBuilder.CreatePHI(llvm::Type::getInt32Ty(llvmContext), 2, "iftmp");
+
+	// Branching
+	auto& a = chain[0];
+	{
+		llvm::Value* cond = a.condition->codegen();
+		llvm::Value* val = llvmBuilder.CreateCondBr(cond, trueBlock, falseBlock, nullptr, nullptr);
 	}
-	trueBlock = llvmBuilder.GetInsertBlock();
-	trueBlock->insertInto(parentFunction);
+	
+	// True block
+	{
+		llvmBuilder.SetInsertPoint(trueBlock);
+		llvm::Value* returnValue = a.body->codegen();
+		//if (trueBody == nullptr) {
+		//	return LogErrorV("Couldn't generate code block for true branch of if statement");
+		//}
+		if (returnValue == nullptr) {
+			llvmBuilder.CreateBr(continueBlock);
+		}
 
-	//trueBlock->insertInto(parentFunction, nullptr);
-	//llvmBuilder.Insert(trueBody);
+		//pn->addIncoming(trueBody, trueBlock);
+		trueBlock = llvmBuilder.GetInsertBlock(); // Generation might change block pointer, update...
+	}
 
-	llvmBuilder.SetInsertPoint(falseBlock);
-	llvmBuilder.CreateBr(continueBlock);
-	// TODO: Insert false body... (requires parser updates)
+	// False block
+	{
+		llvmBuilder.SetInsertPoint(falseBlock);
 
+		// TODO:: Create false statement
+		llvmBuilder.CreateBr(continueBlock);
 
-
-	trueBlock = llvmBuilder.GetInsertBlock();
-
-	auto& functionBodyBlock = parentFunction->getBasicBlockList();
-	functionBodyBlock.push_back(continueBlock);
-
-
-	return cond;
+		//pn->addIncoming(nullptr, trueBlock);
+		falseBlock = llvmBuilder.GetInsertBlock(); // Generation might change block pointer, update...
+	}
+	
+	llvmBuilder.SetInsertPoint(continueBlock); // Bind continue block so future emissions end up here..
+	return continueBlock;
 }
 
 llvm::Value* lang::parser::CodeBlockAST::codegen()
 {
-	llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
+	//llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
 	
-	std::string name = "block1";
-	llvm::BasicBlock* block = llvm::BasicBlock::Create(llvmContext, name, parentFunction);
+	llvm::BasicBlock* block = llvmBuilder.GetInsertBlock();
+	assert(block != nullptr && "If block can be empty create a new one... ");
+	assert(block->getParent() != nullptr && "Code block is only allowed to live inside of a function. Is the code block you're writing to inserted yet?");
+
 	llvmBuilder.SetInsertPoint(block);
 	
 	for (auto* n : body) {
 		//auto& list = block->getInstList();
 		//list.addNodeToList(n->codegen());
-
+		
+		assert(n->type != "Return" && "return type should not be part of codeblock body. Set returnValue instead");
 		auto* val = n->codegen();
 	}
 
 	if (returnValue) {
+		// Codeblock has return value
 		return returnValue->codegen();
 	}
 
