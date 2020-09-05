@@ -1,7 +1,29 @@
 // import core.fmt
 
 extern fn printf(string a)
+extern fn sqrtf(f32 a) f32
+extern fn sinf(f32 a) f32
+extern fn cosf(f32 a) f32
 
+struct Vec3 {
+	f32 x
+	f32 y
+	f32 z
+}
+
+// impl Add<Vec3> on Abc {
+// 	fn add(Vec3* a, Vec3* b) {
+// 		a.x += b.x
+// 		a.y += b.y
+// 		a.z += b.z
+// 	}
+// }
+
+// impl Abc {
+// 	fn len(Abc* a) f32 {
+// 		return sqr(a.x * a.x + a.y * a.y + a.z * a.z)
+// 	}
+// }
 
 fn testFunc(i32 a) i32 {
 	if a > 1 {
@@ -13,6 +35,10 @@ fn testFunc(i32 a) i32 {
 
 fn logTest(string a) {
 	printf(a)
+}
+
+fn takesVec3(Vec3 v) Vec3 {
+	return Vec3(1, 2, 3)
 }
 
 fn main() i32 {
@@ -31,5 +57,7 @@ fn main() i32 {
 	}
 
 	printf("Bye world!\n")
+	logTest("works??")
+	takesVec3(Vec3(1f32,2f32,3f32))
 	return 0
 }

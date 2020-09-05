@@ -250,6 +250,30 @@ namespace lang::parser {
 		virtual llvm::Value* codegen() override;
 	};
 
+	/// StructAST - A struct definition
+	class StructAST : public ExprAST {
+	public:
+		std::string name;
+		CodeBlockAST* body;
+
+		StructAST(std::string name, CodeBlockAST* body)
+			: ExprAST("Struct"),
+			name(name),
+			body(body) {}
+
+		virtual void print(AstPrinter& printer) override {
+			printer.print("{");
+			for (auto* a : body->body) {
+				a->print(printer);
+			}
+			printer.print("}");
+			printer.print(prettyName().c_str());
+		}
+
+		virtual llvm::Value* codegen() override;
+	};
+
+
 	/// FunctionSignatureAST - This class represents the "prototype" or "signature" for a function,
 	/// which captures its name, and its argument names (thus implicitly the number
 	/// of arguments the function takes).

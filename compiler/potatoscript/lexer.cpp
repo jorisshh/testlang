@@ -237,6 +237,13 @@ std::vector<Token> lang::lexer::parse(const std::string& s) noexcept
             continue;
         }
 
+        if (isKeyword(s, i, "struct")) {
+            size_t identifierLength = 6;
+            token.push_back(createSingleToken(TokenType::KEYWORD_STRUCT, s, lineNumber, i, identifierLength));
+            i += identifierLength;
+            continue;
+        }
+
         if (isKeyword(s, i, "true")) {
             size_t identifierLength = 4;
             token.push_back(createSingleToken(TokenType::KEYWORD_TRUE, s, lineNumber, i, identifierLength));

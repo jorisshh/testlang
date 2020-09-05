@@ -1,12 +1,21 @@
 ; ModuleID = 'potatoscript'
 source_filename = "potatoscript"
 
+%Vec3 = type { float, float, float }
+
 @0 = private unnamed_addr constant [15 x i8] c"Hello world!\\n\00", align 1
 @1 = private unnamed_addr constant [9 x i8] c"oh no...\00", align 1
 @2 = private unnamed_addr constant [14 x i8] c"Oh lawd its 1\00", align 1
 @3 = private unnamed_addr constant [13 x i8] c"Bye world!\\n\00", align 1
+@4 = private unnamed_addr constant [8 x i8] c"works??\00", align 1
 
 declare void @printf(i8* %a)
+
+declare i32 @sqrtf(float %a)
+
+declare i32 @sinf(float %a)
+
+declare i32 @cosf(float %a)
 
 define i32 @testFunc(i32 %a) {
 entry:
@@ -26,6 +35,11 @@ ifcontinue:                                       ; preds = %falseblock
 define void @logTest(i8* %a) {
 entry:
   call void @printf(i8* %a)
+  ret void
+}
+
+define i32 @takesVec3(%Vec3 %v) {
+entry:
   ret void
 }
 
@@ -64,5 +78,6 @@ falseblock5:                                      ; preds = %ifcontinue3
 
 ifcontinue6:                                      ; preds = %falseblock5, %trueblock4
   call void @printf(i8* getelementptr inbounds ([13 x i8], [13 x i8]* @3, i32 0, i32 0))
+  call void @logTest(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @4, i32 0, i32 0))
   ret i32 0
 }

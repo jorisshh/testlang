@@ -91,6 +91,7 @@ namespace lang::lexer {
             KEYWORD_INT64,
             KEYWORD_FLOAT32,
             KEYWORD_FLOAT64,
+
             KEYWORD_BOOL,
             KEYWORD_TRUE,
             KEYWORD_FALSE,

@@ -30,6 +30,7 @@ static llvm::LLVMContext llvmContext;
 static llvm::IRBuilder<> llvmBuilder(llvmContext);
 static std::unique_ptr<llvm::Module> llvmModule;
 static std::map<std::string, llvm::Value*> llvmNamedValues;
+static std::map<std::string, llvm::StructType*> knownStructTypes;
 
 class LLVMOutputStream : public llvm::raw_ostream {
 public:
@@ -86,6 +87,28 @@ static bool isConstant(TokenType::Type t) {
 		t == TokenType::STRING ||
 		t == TokenType::KEYWORD_TRUE ||
 		t == TokenType::KEYWORD_FALSE;
+}
+
+bool isTypeIdentifier(lang::lexer::Token t) {
+	if (t.type == TokenType::KEYWORD_BOOL) return true;
+	if (t.type == TokenType::KEYWORD_FLOAT32) return true;
+	if (t.type == TokenType::KEYWORD_FLOAT64) return true;
+	if (t.type == TokenType::KEYWORD_INT8) return true;
+	if (t.type == TokenType::KEYWORD_INT16) return true;
+	if (t.type == TokenType::KEYWORD_INT32) return true;
+	if (t.type == TokenType::KEYWORD_INT64) return true;
+	if (t.type == TokenType::KEYWORD_UINT8) return true;
+	if (t.type == TokenType::KEYWORD_UINT16) return true;
+	if (t.type == TokenType::KEYWORD_UINT32) return true;
+	if (t.type == TokenType::KEYWORD_UINT64) return true;
+	if (t.type == TokenType::KEYWORD_STRING) return true;
+	if (t.type == TokenType::KEYWORD_VOID) return true;
+
+	if (knownStructTypes.contains(t.span.string)) {
+		return true;
+	}
+
+	return false;
 }
 
 void assert2(bool b, const Token& token, const char* msg) {
@@ -167,7 +190,11 @@ BinaryExprAST* lang::parser::binaryExpression(TokenType::Type terminator) {
 
 VariableExprAST* variableExpr() {
 	auto& type = p.current(true);
-	auto& name = p.current(true);
+	
+	lang::lexer::Token name;
+	if (p.current().type == TokenType::IDENTIFIER) {
+		name = p.current(true);
+	}
 
 	ExprAST* assignment = nullptr;
 	if (p.next().type == TokenType::EQUALS) {
@@ -181,8 +208,8 @@ VariableExprAST* variableExpr() {
 ArgumentListAST* lang::parser::argumentsDefinitionList(TokenType::Type terminator) {
 	std::vector<ExprAST*> args;
 
-	assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
-	p.eat(); // Eat "("
+	//assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
+	//p.eat(); // Eat "("
 
 	while (p.current().type != terminator) {
 
@@ -199,8 +226,8 @@ ArgumentListAST* lang::parser::argumentsDefinitionList(TokenType::Type terminato
 		std::abort();
 	}
 
-	assert2(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
-	p.eat(); // Eat ")"
+	//assert2(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
+	//p.eat(); // Eat ")"
 
 	return createAst<ArgumentListAST>(args);
 }
@@ -261,17 +288,43 @@ CodeBlockAST* lang::parser::codeBlock()
 	return createAst<CodeBlockAST>(codeBlock, returnValue);
 }
 
+
+ExprAST* parseStruct() {
+	p.eat(); // eat struct
+	auto& name = p.current();
+	p.eat();
+
+	assert2(p.current().type == TokenType::LEFT_CURLY, p.current(), "Expected {");
+
+	CodeBlockAST* body = codeBlock();
+
+	return createAst<StructAST>(name.span.string, body);
+}
+
+
+
 ExprAST* parseFunction(bool isExternal) {
 	p.eat(); // eat func
 	auto& name = p.current();
 	p.eat();
 
 	assert2(p.current().type == TokenType::LEFT_PAREN, p.current(), "Expected (");
+	p.eat(); // Eat (
 	auto args = argumentsDefinitionList(TokenType::RIGHT_PAREN);
+	assert2(p.current().type == TokenType::RIGHT_PAREN, p.current(), "Expected )");
+	p.eat(); // Eat )
 
 	ArgumentListAST* returnList = nullptr;
-	if (p.current().type == TokenType::LEFT_PAREN) {
+	/*if (p.current().type == TokenType::LEFT_PAREN) {
 		returnList = argumentsDefinitionList(TokenType::RIGHT_PAREN);
+	}*/
+	
+	if (isTypeIdentifier(p.current())) {
+		// TODO: Support more than 1 return type
+		std::vector<ExprAST*> arguments;
+		arguments.push_back(variableExpr());
+		returnList = createAst<ArgumentListAST>(arguments);
+		//returnList = argumentsDefinitionList(TokenType::LEFT_CURLY); // NOTE: does not work for externs as it doesn't have a terminator symbol (e.g. '{' )
 	}
 
 	CodeBlockAST* body = nullptr;
@@ -386,6 +439,11 @@ ExprAST* lang::parser::expression() {
 	case TokenType::KEYWORD_FUNC: {
 		return parseFunction(false);
 	}
+	case TokenType::KEYWORD_STRUCT: {
+		//p.eat(); // Eat struct
+		assert2(p.next().type == TokenType::IDENTIFIER, p.current(), "Expected struct identifier");
+		return parseStruct();
+	}
 	default:
 		break;
 	}
@@ -416,7 +474,7 @@ ExprAST* lang::parser::expression() {
 
 /// LogError* - These are little helper functions for error handling.
 ExprAST* LogError(const char* str) {
-	fprintf(stderr, "Error: %s\n", str);
+	std::cerr << "ERROR: " << str << "\n";
 	return nullptr;
 }
 
@@ -443,6 +501,21 @@ std::vector<ExprAST*> lang::parser::parse(const std::vector<Token>& tokens)
 		// Ignored (used to escape parsing, kind of ugly...)
 	}
 	
+	// Index functions and structs first... 
+	for (auto* n : p.astNodes) {
+		auto* fn = dynamic_cast<FunctionAST*>(n);
+		if (fn) {
+			fn->codegen();
+			continue;
+		}
+
+		auto* strukt = dynamic_cast<StructAST*>(n);
+		if (strukt) {
+			strukt->codegen();
+			continue;
+		}
+	}
+
 	for (auto* n : p.astNodes) {
 		n->codegen();
 	}
@@ -547,7 +620,8 @@ llvm::Value* lang::parser::CallExprAST::codegen()
 
 	std::vector<llvm::Value*> llvmArgs;
 	for (size_t i = 0; i < args->arguments.size(); i++) {
-		llvm::Value* arg = args->arguments[i]->codegen();
+		auto* a = args->arguments[i];
+		llvm::Value* arg = a->codegen();
 		if (arg == nullptr) {
 			LogError("Couldn't gen code for argument...");
 		}
@@ -580,6 +654,9 @@ llvm::Function* lang::parser::FunctionSignatureAST::codegen()
 		}
 		else if (v->type == "i64") {
 			params.push_back(llvm::Type::getInt64Ty(llvmContext));
+		}
+		else if (knownStructTypes.contains(v->type)) {
+			params.push_back(knownStructTypes[v->type]);
 		}
 		else {
 			LogErrorV("Couldn't determine type...");
@@ -728,6 +805,24 @@ llvm::Value* lang::parser::IfAST::codegen()
 	return continueBlock;
 }
 
+llvm::Value* lang::parser::StructAST::codegen()
+{
+	std::vector<llvm::Type*> members;
+	members.push_back(llvm::Type::getFloatTy(llvmContext));
+	members.push_back(llvm::Type::getFloatTy(llvmContext));
+	members.push_back(llvm::Type::getFloatTy(llvmContext));
+	
+	llvm::ArrayRef<llvm::Type*> m(members);
+
+	auto* structType = llvm::StructType::create(llvmContext, m, this->name, false);
+	knownStructTypes[this->name] = structType;
+
+
+	return llvm::Constant::getNullValue(structType);
+	//return nullptr;
+}
+
+
 llvm::Value* lang::parser::CodeBlockAST::codegen()
 {
 	//llvm::Function* parentFunction = llvmBuilder.GetInsertBlock()->getParent();
@@ -736,8 +831,6 @@ llvm::Value* lang::parser::CodeBlockAST::codegen()
 	assert(block != nullptr && "If block can be empty create a new one... ");
 	assert(block->getParent() != nullptr && "Code block is only allowed to live inside of a function. Is the code block you're writing to inserted yet?");
 
-	llvmBuilder.SetInsertPoint(block);
-	
 	for (auto* n : body) {
 		//auto& list = block->getInstList();
 		//list.addNodeToList(n->codegen());
